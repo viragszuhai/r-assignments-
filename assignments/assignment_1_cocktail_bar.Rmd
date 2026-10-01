@@ -32,6 +32,10 @@ Note: There are several different ways to solve these tasks, feel free to come u
 Read the cocktail dataset from: <https://github.com/nthun/cocktail-balance> You can also find the codebook there.
 
 
+```{r coctail_data, include = FALSE}
+library(readr)
+coctail_data <- read_tsv("https://raw.githubusercontent.com/nthun/cocktail-balance/refs/heads/master/cocktail_data.tsv")
+
 ```
 
 ## 2. Transform the data table and clean the ingredient variable!
