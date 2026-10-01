@@ -35,14 +35,23 @@ Read the cocktail dataset from: <https://github.com/nthun/cocktail-balance> You 
 ```{r coctail_data, include = FALSE}
 library(readr)
 coctail_data <- read_tsv("https://raw.githubusercontent.com/nthun/cocktail-balance/refs/heads/master/cocktail_data.tsv")
-
 ```
 
 ## 2. Transform the data table and clean the ingredient variable!
 
 The ingredients are currently in a single cell for each cocktail. It would be better to put them in separate rows. Also, the variable should be cleaned of all quantities (e.g. 1/2 oz, 2 dashes, etc.), and the indicator of alcohol content (e.g. 47.3% abv). You will need to use this cleaned table in later tasks.
 
-```{r}
+```{r coctail_clean, include = FALSE}
+coctail_clean <- coctail_data %>% 
+  separate_longer_delim(cols = ingredients,
+                        delim = regex("<br\\s*/?>|<b4\\s*/?>")) %>%
+ mutate(
+   ingredients = ingredients %>% 
+     str_remove("\\(?\\s*[0-9.]+\\s*%\\s*abv\\s*\\)?") %>% 
+     str_remove("^[0-9/. ]+(oz|dashes|dash|drops|drop)?\\s*") %>% 
+     str_squish()) %>% 
+
+view()
 
 ```
 
@@ -50,16 +59,23 @@ The ingredients are currently in a single cell for each cocktail. It would be be
 
 Before opening the bar, you need to find a reliable supplier that has all the ingredients. You need to send a list of all possible ingredients you will need. They don't need the quantities (i.e. how many of these are needed), just the names of the ingredients.
 
-```{r}
+```{r coctail_ingredients_alphabetical, include = FALSE}
+coctail_ingredients_alphabetical <- coctail_clean %>%
+  arrange(ingredients) %>%
+
+view()
 
 ```
 
 ## 4. Number of unique ingredients
 
 How many different ingredients you will need?
-
+answer: 63
 ```{r}
+coctail_ingredients_alphabetical %>%
+  summarise(n = n_distinct(ingredients)) %>%
 
+view()
 ```
 
 ## 5. What are the top 10 ingredients?
@@ -67,6 +83,11 @@ How many different ingredients you will need?
 What are the 10 most frequently used ingredients? If there are ties, you can list more than 10.
 
 ```{r}
+coctail_top10_ingredients <- coctail_ingredients_alphabetical %>% 
+  count(ingredients, sort = TRUE)  %>% 
+  slice_max(n, n = 10, with_ties = TRUE)
+  
+print(coctail_top10_ingredients)
 
 ```
 
@@ -75,7 +96,11 @@ What are the 10 most frequently used ingredients? If there are ties, you can lis
 Count the number of ingredients and filter all the cocktails that has that many.
 
 ```{r}
+coctails_most_ingredients <- coctail_ingredients_alphabetical %>%
+  count(name) %>%
+  filter(n == max(n))
 
+print(coctails_most_ingredients)
 ```
 
 ## 7. How many ingredients appear in only one cocktail (rare ingredient)?
@@ -83,7 +108,13 @@ Count the number of ingredients and filter all the cocktails that has that many.
 Count all cocktails with only one ingredient, and
 
 ```{r}
-
+coctail_ingredients_alphabetical %>% 
+  filter(!is.na(ingredients), ingredients !="")  %>%
+  count(ingredients)  %>%
+  filter(n == 1)  %>%
+  nrow()  %>%
+  
+print ()
 ```
 
 ## 8. Which cocktail has an ingredient that is only used in one cocktail?
