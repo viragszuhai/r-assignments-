@@ -74,7 +74,7 @@ view()
 
 ## 4. Number of unique ingredients
 
-How many different ingredients you will need? 
+How many different ingredients you will need?
 
 ```{r}
 n_ingredients <- coctail_ingredients_alphabetical %>%
@@ -103,15 +103,14 @@ view()
 Count the number of ingredients and filter all the cocktails that has that many.
 
 ```{r}
-coctails_most_ingredients <- coctail_clean %>%
-  distinct(name, ingredients) %>%
-  count(name) %>%
-  filter(n == max(n))
-
-view(coctails_most_ingredients)
+most_ingredients <- coctail_clean %>% 
+  count(name, name = "n_ingredients", sort = TRUE) %>%
+  slice_max(n_ingredients, n = 1, with_ties = TRUE)
+  
+view(most_ingredients)
 ```
 
-## 7. How many ingredients appear in only one cocktail (rare ingredient)?
+## 7. How many ingredients appear in only one cocktail (rare ingredient)? !!44!!
 
 Count all cocktails with only one ingredient, and
 
@@ -121,24 +120,45 @@ rare_ingredients <- coctail_clean %>%
   count(ingredients) %>%
   filter(n == 1)
 
-nrow(rare_ingredients)
+view(rare_ingredients)
 
 ```
 
-## 8. Which cocktail has an ingredient that is only used in one cocktail?
+## 8. Which cocktail has an ingredient that is only used in one cocktail? !!44!!
 
 ```{r}
 
+pairs <- coctail_clean %>%
+  distinct(name, ingredients)
 
-```
+unique_ingredients <- pairs %>%
+  count(ingredients) %>%
+  filter(n == 1)
 
-## 9. What are the cocktails without rare ingredients?
-
-```{r}
+result <- pairs %>%
+  filter(ingredients %in% rare_ingredients$ingredients) %>%
   
+view(result)  
 ```
 
-## 10. Create a cheat sheet for the bartender!
+## 9. What are the cocktails without rare ingredients? !!44!!
+
+```{r}
+all_cocktails <- coctail_clean %>%
+  distinct(name)
+
+# cocktails that DO have a rare ingredient (from question 8)
+cocktails_with_rare <- result %>%
+  distinct(name)
+
+# cocktails without rare ingredients
+no_rare <- all_cocktails %>%
+  anti_join(cocktails_with_rare, by = "name")
+
+view(no_rare)
+```
+
+## 10. Create a cheat sheet for the bartender! !!44!!
 
 Create a matrix that shows all cocktail names as rows and all ingredients as columns. When a cocktail requires an ingredient, there should be an "X" in the cell, otherwise, the cell should remain empty. Example:
 
@@ -151,7 +171,18 @@ tribble(~name, ~Lime, ~`White rum`, ~`Cane sugar`, ~`Coca-cola`, ~Mint, ~Soda,
 ```
 
 ```{r}
+library(tidyverse)
+cheat_sheet <- coctail_clean %>%
+  mutate(ingredients = str_to_sentence(ingredients)) %>%   # consistent capitalisation, like the example
+  filter(ingredients != "") %>%                             # drop any empty cells left by the cleaning
+  distinct(name, ingredients) %>%                           # one row per cocktail-ingredient pair
+  mutate(value = "X") %>%
+  pivot_wider(names_from = ingredients,
+              values_from = value,
+              values_fill = "") %>%                         # empty cell where the ingredient isn't needed
+  select(name, sort(setdiff(names(.), "name")))             # name first, ingredients in alphabetical order
 
+view(cheat_sheet)
 ```
 
 Congrats, the bar is now officially open!

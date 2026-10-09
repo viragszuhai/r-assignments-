@@ -59,6 +59,10 @@ In your discussion of the findings, briefly interpret the results of the above a
 Read the dataset used in this assignment. Pay attention to the extension of the datafile.
 
 ```{r}
+library(tidyverse)
+library(readxl)
+
+df <- read_excel("/Users/szuhaivirag/Desktop/R interim assingments/R interim assingments/data/assignment_3_dataset.xlsx")
 
 ```
 
@@ -69,6 +73,21 @@ Read the dataset used in this assignment. Pay attention to the extension of the 
 Run an exploratory data analysis (EDA) to investigate the dataset.
 
 ```{r}
+library(tidyverse)
+library(data.table)
+
+str(df)
+summary(df)
+colSums(is.na(df))
+table(df$sex, useNA = "ifany")
+
+df %>%
+  select(where(is.numeric)) %>%
+  pivot_longer(everything()) %>%
+  ggplot(aes(x = value)) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~name, scales = "free") +
+  theme_minimal()
 
 ```
 
@@ -77,7 +96,10 @@ Run an exploratory data analysis (EDA) to investigate the dataset.
 If you find values in the dataset during the EDA, that are not correct based on the provided descriptions of the variables of the dataset please correct them here.
 
 ```{r}
+new_df <- df %>%
+  mutate(sex = recode(sex, "woman" = "female"))
 
+table(new_df$sex, useNA = "ifany")
 ```
 
 ### Model diagnostics
@@ -86,7 +108,10 @@ If you find values in the dataset during the EDA, that are not correct based on 
 In order to test the more complex model for outliers and to test the assumptions first build the model.
 
 ```{r}
+complex_model <- lm(pain ~ age + sex + STAI_trait + pain_cat + mindfulness +
+                      cortisol_serum + cortisol_saliva, data = new_df)
 
+summary(complex_model)
 ```
 
 #### Checking for influential outliers
@@ -94,7 +119,15 @@ In order to test the more complex model for outliers and to test the assumptions
 Check for outlier values in the model.
 
 ```{r}
+graphics.off()
+plot(complex_model, which = 4)
 
+new_df <- new_df %>% filter(pain <= 10)
+
+nrow(new_df)    # should now be 159
+view(new_df)
+
+## One participant (row 142) had a pain rating of 50, which is impossible on the 0 to 10 pain scale. This was treated as a coding error (it also had a very large Cook's distance of about 0.38 compared to all other cases). Because the true value could not be determined, and guessing would mean inventing data, the participant was excluded from the analysis (final n = 159).
 ```
 
 #### Checking assumptions
@@ -102,19 +135,23 @@ Check for outlier values in the model.
 Check the normality assumption.
 
 ```{r}
-
+plot(complex_model, which = 2)             # QQ plot
+hist(residuals(complex_model), breaks = 20)
+shapiro.test(residuals(complex_model))
 ```
 
 Check the linearity assumption.
 
 ```{r}
-
+library(car)
+residualPlots(complex_model)
 ```
 
 Check the homoscedasticty assumption (homogeneity of variance).
 
 ```{r}
-
+plot(complex_model, which = 3)             # scale-location plot
+ncvTest(complex_model)      
 ```
 
 Check the multicollinearity assumption.
@@ -126,7 +163,10 @@ https://statisticalhorizons.com/multicollinearity
 http://blog.minitab.com/blog/understanding-statistics/handling-multicollinearity-in-regression-analysis
 
 ```{r}
+complex_model <- lm(pain ~ age + sex + STAI_trait + pain_cat + mindfulness +
+                      cortisol_serum + cortisol_saliva, data = new_df)
 
+#### Multicollinearity was assessed using VIF. Serum cortisol (VIF = 6.09) and saliva cortisol (VIF = 6.66) both exceeded the threshold of 3, reflecting their strong correlation (r = ...). Because serum cortisol is regarded in medical research as more reliably related to stress, saliva cortisol was excluded and serum cortisol was retained. After refitting, all VIFs were below 3, and the other assumptions were re-checked on the final model.
 ```
 
 ### Making decision based on model diagnostics
@@ -134,13 +174,16 @@ http://blog.minitab.com/blog/understanding-statistics/handling-multicollinearity
 If based on the assumption tests you decide to drop a predictor variable you should do that here. Create your updated model.
 
 ```{r}
-
+new_complex_model <- lm(pain ~ age + sex + STAI_trait + pain_cat + mindfulness +
+                      cortisol_serum, data = new_df)
+vif(new_complex_model)
 ```
 
 #### Checking outliers of the updated model
 
 ```{r}
-
+graphics.off()
+plot(new_complex_model, which = 4)
 ```
 
 #### Checking assumptions of the updated model
@@ -148,25 +191,29 @@ If based on the assumption tests you decide to drop a predictor variable you sho
 Normality assumption
 
 ```{r}
-
+plot(new_complex_model, which = 2)             
+hist(residuals(new_complex_model), breaks = 20)
+shapiro.test(residuals(new_complex_model))
 ```
 
 Linearity assumption
 
 ```{r}
-
+dev.new(width = 10, height = 10)
+residualPlots(new_complex_model)
 ```
 
 Homoscedasticty assumption (homogeneity of variance)
 
 ```{r}
-
+plot(new_complex_model, which = 3)          
+ncvTest(new_complex_model)      
 ```
 
 Multicollinearity assumption
 
 ```{r}
-
+vif(new_complex_model)
 ```
 
 ## Model comparison
@@ -174,18 +221,98 @@ Multicollinearity assumption
 Create the simple model and get the results of the model that needs to be reported based on the What to report section.
 
 ```{r}
+new_df$sex <- factor(new_df$sex)
 
+simple_model <- lm(pain ~ age + sex, data = new_df)
+complex_model_final <- lm(pain ~ age + sex + STAI_trait + pain_cat +
+                            mindfulness + cortisol_serum, data = new_df)
+
+coef_table <- function(model) {
+  B    <- coef(model)
+  ci   <- confint(model)
+  p    <- summary(model)$coefficients[, 4]
+  X    <- model.matrix(model)            # sex becomes a 0/1 dummy here
+  y    <- model.response(model.frame(model))
+  Beta <- B * apply(X, 2, sd) / sd(y)
+  Beta[1] <- NA                          # the intercept has no Beta
+
+  data.frame(
+    B       = round(B, 3),
+    CI_low  = round(ci[, 1], 3),
+    CI_high = round(ci[, 2], 3),
+    Beta    = round(Beta, 3),
+    p       = round(p, 4)
+  )
+}
+
+coef_table(simple_model)
+coef_table(complex_model_final)
+
+round(coef(complex_model_final), 2)
+levels(new_df$sex)   # shows which level is the reference
 ```
 
 Create the more complex model based on the results of the model diagnostics. Also, get the results that needs to be reported based on the What to report section.
 
 ```{r}
+new_df$sex <- factor(new_df$sex)
 
+# refit after the factor change, so everything is built from the same data
+new_complex_model <- lm(pain ~ age + sex + STAI_trait + pain_cat +
+                          mindfulness + cortisol_serum, data = new_df)
+
+# 1. Model test statistics: adj. R2, F, df, p
+summary(new_complex_model)
+
+s <- summary(new_complex_model)
+s$adj.r.squared
+s$fstatistic          # F, numerator df, denominator df
+pf(s$fstatistic[1], s$fstatistic[2], s$fstatistic[3], lower.tail = FALSE)  # p
+
+# 2. Coefficient table: B, 95% CI, Beta, p
+coef_table <- function(model) {
+  B    <- coef(model)
+  ci   <- confint(model)
+  p    <- summary(model)$coefficients[, 4]
+  X    <- model.matrix(model)
+  y    <- model.response(model.frame(model))
+  Beta <- B * apply(X, 2, sd) / sd(y)
+  Beta[1] <- NA
+
+  data.frame(
+    B       = round(B, 3),
+    CI_low  = round(ci[, 1], 3),
+    CI_high = round(ci[, 2], 3),
+    Beta    = round(Beta, 3),
+    p       = round(p, 4)
+  )
+}
+
+coef_table(new_complex_model)
+
+# 3. Regression equation
+round(coef(new_complex_model), 3)
+levels(new_df$sex)    # first level is the reference
 ```
 
 Compare the two models.
 
 ```{r}
+# same data in both models? (must be identical, otherwise anova() fails)
+nobs(simple_modell)
+nobs(new_complex_model)
 
+# 1. Variance explained
+summary(simple_modell)$r.squared
+summary(new_complex_model)$r.squared
+summary(simple_modell)$adj.r.squared
+summary(new_complex_model)$adj.r.squared
+
+# 2. AIC (lower = better)
+AIC(simple_modell)
+AIC(new_complex_model)
+
+# 3. F test comparing the nested models
+anova(simple_modell, new_complex_model)
 ```
 
