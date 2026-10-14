@@ -77,17 +77,36 @@ library(tidyverse)
 library(data.table)
 
 str(df)
-summary(df)
-colSums(is.na(df))
-table(df$sex, useNA = "ifany")
+view(df)
 
+#checking categorical data 
+ggplot(df, aes(x = sex)) + 
+  geom_bar()
+
+#checking numerical data
 df %>%
-  select(where(is.numeric)) %>%
-  pivot_longer(everything()) %>%
-  ggplot(aes(x = value)) +
-  geom_histogram(bins = 30) +
-  facet_wrap(~name, scales = "free") +
-  theme_minimal()
+  select(pain, age, STAI_trait, pain_cat, cortisol_serum, cortisol_saliva, mindfulness, weight, IQ, household_income) %>%
+  pivot_longer(everything(), names_to = "valtozo", values_to = "ertek") %>%
+  ggplot(aes(x = ertek)) + 
+  geom_histogram(bins = 20) + 
+  facet_wrap(~ valtozo, scales = "free")
+
+#numerical summaries - measures of center 
+## Mean 
+df %>%
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+## Median 
+df %>%
+  summarise(across(where(is.numeric), ~ median(.x, na.rm = TRUE)))
+
+#numerical summaries - measures of variability 
+## Standard deviation 
+df %>%
+  summarise(across(where(is.numeric), ~ sd(.x, na.rm = TRUE)))
+
+## Variance 
+df %>%
+  summarise(across(where(is.numeric), ~ var(.x, na.rm = TRUE)))
 
 ```
 
@@ -99,7 +118,10 @@ If you find values in the dataset during the EDA, that are not correct based on 
 new_df <- df %>%
   mutate(sex = recode(sex, "woman" = "female"))
 
-table(new_df$sex, useNA = "ifany")
+
+ggplot(new_df, aes(x = sex)) + 
+  geom_bar()
+
 ```
 
 ### Model diagnostics
@@ -119,15 +141,9 @@ summary(complex_model)
 Check for outlier values in the model.
 
 ```{r}
-graphics.off()
 plot(complex_model, which = 4)
-
-new_df <- new_df %>% filter(pain <= 10)
-
-nrow(new_df)    # should now be 159
-view(new_df)
-
-## One participant (row 142) had a pain rating of 50, which is impossible on the 0 to 10 pain scale. This was treated as a coding error (it also had a very large Cook's distance of about 0.38 compared to all other cases). Because the true value could not be determined, and guessing would mean inventing data, the participant was excluded from the analysis (final n = 159).
+cooks <- cooks.distance(complex_model)
+sort(cooks, decreasing = TRUE)[1:5]
 ```
 
 #### Checking assumptions
@@ -135,22 +151,21 @@ view(new_df)
 Check the normality assumption.
 
 ```{r}
-plot(complex_model, which = 2)             # QQ plot
-hist(residuals(complex_model), breaks = 20)
+plot(complex_model, which = 2)
 shapiro.test(residuals(complex_model))
 ```
 
 Check the linearity assumption.
 
 ```{r}
-library(car)
-residualPlots(complex_model)
+plot(complex_model, 1)
 ```
 
 Check the homoscedasticty assumption (homogeneity of variance).
 
 ```{r}
-plot(complex_model, which = 3)             # scale-location plot
+library(car)
+plot(complex_model, which = 3)             
 ncvTest(complex_model)      
 ```
 
@@ -166,7 +181,8 @@ http://blog.minitab.com/blog/understanding-statistics/handling-multicollinearity
 complex_model <- lm(pain ~ age + sex + STAI_trait + pain_cat + mindfulness +
                       cortisol_serum + cortisol_saliva, data = new_df)
 
-#### Multicollinearity was assessed using VIF. Serum cortisol (VIF = 6.09) and saliva cortisol (VIF = 6.66) both exceeded the threshold of 3, reflecting their strong correlation (r = ...). Because serum cortisol is regarded in medical research as more reliably related to stress, saliva cortisol was excluded and serum cortisol was retained. After refitting, all VIFs were below 3, and the other assumptions were re-checked on the final model.
+vif(complex_model)
+
 ```
 
 ### Making decision based on model diagnostics
@@ -182,8 +198,9 @@ vif(new_complex_model)
 #### Checking outliers of the updated model
 
 ```{r}
-graphics.off()
 plot(new_complex_model, which = 4)
+cooks <- cooks.distance(new_complex_model)
+sort(cooks, decreasing = TRUE)[1:5]
 ```
 
 #### Checking assumptions of the updated model
@@ -191,16 +208,14 @@ plot(new_complex_model, which = 4)
 Normality assumption
 
 ```{r}
-plot(new_complex_model, which = 2)             
-hist(residuals(new_complex_model), breaks = 20)
+plot(new_complex_model, which = 2)
 shapiro.test(residuals(new_complex_model))
 ```
 
 Linearity assumption
 
 ```{r}
-dev.new(width = 10, height = 10)
-residualPlots(new_complex_model)
+plot(new_complex_model, 1)
 ```
 
 Homoscedasticty assumption (homogeneity of variance)
@@ -221,35 +236,20 @@ vif(new_complex_model)
 Create the simple model and get the results of the model that needs to be reported based on the What to report section.
 
 ```{r}
-new_df$sex <- factor(new_df$sex)
+library(broom)
+library(lm.beta)
 
 simple_model <- lm(pain ~ age + sex, data = new_df)
-complex_model_final <- lm(pain ~ age + sex + STAI_trait + pain_cat +
-                            mindfulness + cortisol_serum, data = new_df)
 
-coef_table <- function(model) {
-  B    <- coef(model)
-  ci   <- confint(model)
-  p    <- summary(model)$coefficients[, 4]
-  X    <- model.matrix(model)            # sex becomes a 0/1 dummy here
-  y    <- model.response(model.frame(model))
-  Beta <- B * apply(X, 2, sd) / sd(y)
-  Beta[1] <- NA                          # the intercept has no Beta
+glance(simple_model) %>%
+  select(adj.r.squared, statistic, df, df.residual, p.value)
 
-  data.frame(
-    B       = round(B, 3),
-    CI_low  = round(ci[, 1], 3),
-    CI_high = round(ci[, 2], 3),
-    Beta    = round(Beta, 3),
-    p       = round(p, 4)
-  )
-}
+coef_table_simple <- tidy(simple_model, conf.int = TRUE) %>%
+  mutate(beta = lm.beta(simple_model)$standardized.coefficients) %>%
+  select(term, B = estimate, CI_low = conf.low, CI_high = conf.high,
+         beta, p = p.value)
+coef_table_simple
 
-coef_table(simple_model)
-coef_table(complex_model_final)
-
-round(coef(complex_model_final), 2)
-levels(new_df$sex)   # shows which level is the reference
 ```
 
 Create the more complex model based on the results of the model diagnostics. Also, get the results that needs to be reported based on the What to report section.
