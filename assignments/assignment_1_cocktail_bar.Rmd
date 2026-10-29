@@ -155,7 +155,7 @@ no_rare <- all_cocktails %>%
 nrow(no_rare)
 ```
 
-## 10. Create a cheat sheet for the bartender! !!44!!
+## 10. Create a cheat sheet for the bartender! 
 
 Create a matrix that shows all cocktail names as rows and all ingredients as columns. When a cocktail requires an ingredient, there should be an "X" in the cell, otherwise, the cell should remain empty. Example:
 
@@ -169,15 +169,14 @@ tribble(~name, ~Lime, ~`White rum`, ~`Cane sugar`, ~`Coca-cola`, ~Mint, ~Soda,
 
 ```{r}
 cheat_sheet <- coctail_clean %>%
-  mutate(ingredients = str_to_sentence(ingredients)) %>%   # consistent capitalisation, like the example
-  filter(ingredients != "") %>%                             # drop any empty cells left by the cleaning
-  distinct(name, ingredients) %>%                           # one row per cocktail-ingredient pair
+  mutate(ingredients = str_to_sentence(ingredients)) %>%
+  filter(ingredients != "") %>%         
+  distinct(name, ingredients) %>%                         
   mutate(value = "X") %>%
   pivot_wider(names_from = ingredients,
               values_from = value,
-              values_fill = "") %>%                         # empty cell where the ingredient isn't needed
-  select(name, sort(setdiff(names(.), "name")))             # name first, ingredients in alphabetical order
-
+              values_fill = "") %>%                       
+  relocate(name, sort(names(.)))         
 view(cheat_sheet)
 ```
 
