@@ -32,8 +32,6 @@ Note: There are several different ways to solve these tasks, feel free to come u
 Read the cocktail dataset from: <https://github.com/nthun/cocktail-balance> You can also find the codebook there.
 
 ```{r coctail_data, include = FALSE}
-library(tidyverse)
-library(readr)
 
 coctail_data <- read_tsv("https://raw.githubusercontent.com/nthun/cocktail-balance/refs/heads/master/cocktail_data.tsv")
 
@@ -110,7 +108,7 @@ most_ingredients <- coctail_clean %>%
 view(most_ingredients)
 ```
 
-## 7. How many ingredients appear in only one cocktail (rare ingredient)? !!44!!
+## 7. How many ingredients appear in only one cocktail (rare ingredient)?
 
 Count all cocktails with only one ingredient, and
 
@@ -120,14 +118,13 @@ rare_ingredients <- coctail_clean %>%
   count(ingredients) %>%
   filter(n == 1)
 
-view(rare_ingredients)
+nrow(rare_ingredients)
 
 ```
 
 ## 8. Which cocktail has an ingredient that is only used in one cocktail? !!44!!
 
 ```{r}
-
 pairs <- coctail_clean %>%
   distinct(name, ingredients)
 
@@ -137,8 +134,10 @@ unique_ingredients <- pairs %>%
 
 result <- pairs %>%
   filter(ingredients %in% rare_ingredients$ingredients) %>%
-  
-view(result)  
+  distinct(name)
+
+nrow(result)  
+
 ```
 
 ## 9. What are the cocktails without rare ingredients? !!44!!
@@ -147,15 +146,13 @@ view(result)
 all_cocktails <- coctail_clean %>%
   distinct(name)
 
-# cocktails that DO have a rare ingredient (from question 8)
 cocktails_with_rare <- result %>%
   distinct(name)
 
-# cocktails without rare ingredients
 no_rare <- all_cocktails %>%
   anti_join(cocktails_with_rare, by = "name")
 
-view(no_rare)
+nrow(no_rare)
 ```
 
 ## 10. Create a cheat sheet for the bartender! !!44!!
@@ -171,7 +168,6 @@ tribble(~name, ~Lime, ~`White rum`, ~`Cane sugar`, ~`Coca-cola`, ~Mint, ~Soda,
 ```
 
 ```{r}
-library(tidyverse)
 cheat_sheet <- coctail_clean %>%
   mutate(ingredients = str_to_sentence(ingredients)) %>%   # consistent capitalisation, like the example
   filter(ingredients != "") %>%                             # drop any empty cells left by the cleaning
